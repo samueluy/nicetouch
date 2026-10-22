@@ -4,13 +4,14 @@ NiceTouch is an experimental developer preview. Automated checks cover rule crea
 
 ## Latest local results
 
-2026-10-22, Apple Silicon development Mac, macOS 26:
+2026-10-22–23, Apple Silicon development Mac, macOS 26:
 
 | Check | Result |
 | --- | --- |
-| `swift test` | 108 tests passed, zero failures. |
+| `swift test` | 115 tests passed, zero failures. |
 | `swift run ModelProbe --check-cases` | Ten live Apple Intelligence cases passed, including ChatGPT/Codex C-drawing rules. |
 | `zsh Scripts/build-app.sh` | Release build, ad-hoc signing and packaged resource checks passed. |
+| Generation cancellation | In the packaged app, Cancel discarded a live Apple request without a preview/error banner; a subsequent local request produced a valid conflict-checked preview. Editing the command removed that preview and its Save control. |
 | C-rule preview | A library suggestion generated a valid one-finger C / Open Codex rule, displayed its C trace and installed-app status, and allowed explicit saving. The test preview was discarded. |
 | Save/reload workflow | AppState integration tests save a reviewed definition to a temporary rules file and reload it in a fresh state instance; conflicts and corrupt-file writes remain blocked. |
 | Rule conflict preview | A Chrome next-tab rule overlapping an enabled previous-tab rule named the existing assignment and disabled Save. |
@@ -23,6 +24,8 @@ The latest live model checks covered five complete commands with expected app, g
 
 - Strict rule parsing, semantic constraints, duplicate keys, app/zone conflicts and collection integrity.
 - AppState preview/save/reload integration, conflicting disabled-rule activation and corrupt-file preservation using temporary stores.
+- Generation-to-preview/save integration using isolated preferences and a controlled provider that ignores cancellation: editing commands, selecting saved rules, explicit cancellation, preview invalidation and subsequent requests.
+- A failed custom local worker clears its ready status. Cancellation avoids repair banners and waits for the provider to finish before another request can start.
 - Synthetic touch trajectories, ambiguous matching and persistence failures.
 - Runtime integration through injected capture/permission/action services: Fn gating, C launches, app switches, cooldown, permission revocation and capture ownership. These tests send no real keyboard input or app launches.
 - Queued native-style frames cannot cross Pause/Start sessions. Removing the session fence makes the regression test dispatch an old gesture; restoring it prevents that dispatch.

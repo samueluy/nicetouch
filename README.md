@@ -61,6 +61,8 @@ The script builds an arm64 app, bundles its resources and applies an ad-hoc sign
 5. Disable overlapping macOS gestures in **System Settings → Trackpad**, enable your rule and select **Start gestures**.
 6. Hold **Fn / Globe** before placing your fingers on the trackpad. Keep it held until you lift them. Select **Pause gestures** to stop capture.
 
+Use **Cancel** to discard a pending preview. Editing the command or selecting a saved rule also invalidates it, so a late reply cannot replace your selection. A provider that does not support prompt cancellation stays busy until it finishes or times out.
+
 Pressing Fn midway does not activate an ongoing gesture. Releasing it cancels the sequence. Fn controls NiceTouch actions; it does not disable macOS gestures. Capture pauses on sleep and needs a manual restart after wake.
 
 ### Open at login and close behavior
