@@ -130,6 +130,9 @@ struct MainView: View {
                 if !models.status.canGenerate { Button("Model settings") { state.showModel = true }.buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(accent) }
                 else { Label(models.privacyLabel, systemImage: models.selection == .api ? "network" : "lock").font(.system(size: 10)).foregroundStyle(.secondary) }
                 Spacer()
+                if state.busy {
+                    Button("Cancel", action: state.cancelGeneration).buttonStyle(.plain).font(.system(size: 11))
+                }
                 Button(action: state.generate) { Text(state.busy ? "Generating…" : "Create preview").padding(.horizontal, 5) }.buttonStyle(.borderedProminent).controlSize(.large)
                     .disabled(!models.status.canGenerate || models.busy || state.busy || state.command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }

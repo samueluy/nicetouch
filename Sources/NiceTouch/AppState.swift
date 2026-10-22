@@ -6,14 +6,16 @@ import NiceTouchModels
 @MainActor final class AppState: ObservableObject {
     @Published var rules: [SavedRule] = []
     @Published var selected: UUID?
-    @Published var command = ""
+    @Published var command = "" {
+        didSet { if oldValue != command { discardPreview() } }
+    }
     @Published var rawJSON = ""
     @Published var draft: RuleDefinition?
     @Published var warning = ""
     @Published var busy = false
-    @Published var requireFn = UserDefaults.standard.object(forKey: "requireFn") as? Bool ?? true {
+    @Published var requireFn: Bool {
         didSet {
-            UserDefaults.standard.set(requireFn, forKey: "requireFn")
+            defaults.set(requireFn, forKey: "requireFn")
             engine.requireFn = requireFn
         }
     }
@@ -26,9 +28,14 @@ import NiceTouchModels
     private var loadFailed = false
     private var sleepObserver: NSObjectProtocol?
     private let store: RuleStore
-    init(store: RuleStore? = nil) {
+    private let defaults: UserDefaults
+    private(set) var generationTask: Task<Void, Never>?
+    private var generationID: UUID?
+    init(store: RuleStore? = nil, models: ModelProviderController? = nil, defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        requireFn = defaults.object(forKey: "requireFn") as? Bool ?? true
         self.store = store ?? RuleStore(url: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("NiceTouch/rules.json"))
-        models = ModelProviderController(customLocal: CustomLocalModelProvider(backend: LocalModel()))
+        self.models = models ?? ModelProviderController(customLocal: CustomLocalModelProvider(backend: LocalModel()), defaults: defaults)
         do { rules = try self.store.load(); selected = rules.first?.id }
         catch { loadFailed = true; warning = "Could not load rules. Your file has been preserved. \(error.localizedDescription)" }
         engine.rules = rules
@@ -47,19 +54,24 @@ import NiceTouchModels
     func generate() {
         guard !busy, !models.busy, models.status.canGenerate, !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         busy = true; draft = nil; rawJSON = ""; warning = ""
-        let request = command
+        let request = command, id = UUID()
+        generationID = id
         let appReferences = NSWorkspace.shared.runningApplications.compactMap { app -> (String, String)? in
             guard let id = app.bundleIdentifier, app.activationPolicy == .regular else { return nil }
             return (id, app.localizedName ?? id)
         }
         let knownApps = Dictionary(appReferences, uniquingKeysWith: { first, _ in first })
         let apps = models.selection == .api ? "" : appReferences.map { "\($0.1): \($0.0)" }.joined(separator: ", ")
-        Task {
-            defer { busy = false }
+        generationTask = Task {
+            defer {
+                if generationID == id { busy = false; generationTask = nil; generationID = nil }
+            }
             do {
+                try Task.checkCancellation()
                 let result = try await models.author(command: request, localAppContext: apps, knownApps: knownApps) { output in
                     _ = try RuleValidator.parse(output)
                 }
+                guard generationID == id, command == request, !Task.isCancelled else { return }
                 rawJSON = result
                 if let data = result.data(using: .utf8),
                    let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -70,20 +82,27 @@ import NiceTouchModels
                     warning = conflictMessage
                 }
             } catch let error as InvalidRuleModelOutput {
+                guard generationID == id, !Task.isCancelled else { return }
                 rawJSON = error.output
                 warning = error.suggestion + " Specify the app, finger count, direction and supported action."
             } catch {
+                guard generationID == id, !Task.isCancelled, !(error is CancellationError) else { return }
                 warning = error.localizedDescription
             }
         }
+    }
+    func cancelGeneration() {
+        guard let task = generationTask else { return }
+        generationID = nil; generationTask = nil; busy = false
+        task.cancel(); models.markGenerationCancelled()
     }
     private var conflictMessage: String {
         guard !conflicts.isEmpty else { return "" }
         return "This gesture is assigned to " + conflicts.map { "\($0.definition.name) → \($0.definition.action.label)" }.joined(separator: ", ") + ". Disable the existing rule or change the app, gesture or zone."
     }
-    func discardPreview() { draft = nil; rawJSON = ""; warning = "" }
+    func discardPreview() { cancelGeneration(); draft = nil; rawJSON = ""; warning = "" }
     func saveDraft() {
-        guard let draft else { return }
+        guard !busy, let draft else { return }
         guard conflicts.isEmpty else { warning = conflictMessage; return }
         let saved = SavedRule(definition: draft)
         if persist(rules + [saved]) { selected = saved.id; self.draft = nil; rawJSON = ""; command = ""; lastEvent = "Gesture saved" }
