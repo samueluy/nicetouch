@@ -8,10 +8,11 @@ NiceTouch is an experimental developer preview. Automated checks cover rule crea
 
 | Check | Result |
 | --- | --- |
-| `swift test` | 93 tests passed, zero failures. |
+| `swift test` | 108 tests passed, zero failures. |
 | `swift run ModelProbe --check-cases` | Ten live Apple Intelligence cases passed, including ChatGPT/Codex C-drawing rules. |
 | `zsh Scripts/build-app.sh` | Release build, ad-hoc signing and packaged resource checks passed. |
 | C-rule preview | A library suggestion generated a valid one-finger C / Open Codex rule, displayed its C trace and installed-app status, and allowed explicit saving. The test preview was discarded. |
+| Save/reload workflow | AppState integration tests save a reviewed definition to a temporary rules file and reload it in a fresh state instance; conflicts and corrupt-file writes remain blocked. |
 | Rule conflict preview | A Chrome next-tab rule overlapping an enabled previous-tab rule named the existing assignment and disabled Save. |
 | Menu-bar lifecycle | Closing the main window left the process running in accessory mode; reopening displayed the window. |
 | Login Items settings | The packaged app reported the registered state from macOS. A full logout/login cycle remains unverified. |
@@ -21,7 +22,10 @@ The latest live model checks covered five complete commands with expected app, g
 ## Automated coverage
 
 - Strict rule parsing, semantic constraints, duplicate keys, app/zone conflicts and collection integrity.
+- AppState preview/save/reload integration, conflicting disabled-rule activation and corrupt-file preservation using temporary stores.
 - Synthetic touch trajectories, ambiguous matching and persistence failures.
+- Runtime integration through injected capture/permission/action services: Fn gating, C launches, app switches, cooldown, permission revocation and capture ownership. These tests send no real keyboard input or app launches.
+- Queued native-style frames cannot cross Pause/Start sessions. Removing the session fence makes the regression test dispatch an old gesture; restoring it prevents that dispatch.
 - Fn sequence admission, late presses and cancellation.
 - Source-intent checks, selected-provider routing and bounded repair.
 - All 12 prompt suggestions validate against their stated intent; search/category filtering and conflicting launch suggestions have coverage.

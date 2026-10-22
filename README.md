@@ -234,7 +234,7 @@ Built-in trackpad → C bridge → Fn sequence gate → gesture recognizer
 
 All providers pass through Swift validation. Source checks guard against substituted actions, app scopes and invented gesture details. One repair attempt uses the selected provider; further validation failures expose raw output for review. These checks cannot prove that a model understood every phrasing.
 
-The runtime uses an in-memory rule snapshot. It performs no model calls, JSON parsing or disk reads while matching gestures. The implementation limits execution to one action per touch sequence, applies a cooldown and cancels execution if the active app changes. Physical verification remains outstanding.
+The runtime uses an in-memory rule snapshot. Capture callbacks carry a session token so queued frames from before Pause cannot reach a restarted engine. It performs no model calls, JSON parsing or disk reads while matching gestures. The implementation limits execution to one action per touch sequence, applies a cooldown and cancels execution if the active app changes. Physical verification remains outstanding.
 
 ## Known limitations
 
