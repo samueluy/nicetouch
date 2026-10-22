@@ -2,7 +2,7 @@ import SwiftUI
 import TrackpadBridge
 
 @main struct NiceTouchApp: App {
-    @StateObject private var state = AppState()
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     init() {
         if CommandLine.arguments.contains("--check-resources") {
             for (name, ext) in [("mlx_worker", "py"), ("rule.schema", "json"), ("system-prompt", "txt")] {
@@ -22,28 +22,21 @@ import TrackpadBridge
         }
     }
     var body: some Scene {
-        Window("NiceTouch", id: "settings") {
-            MainView().environmentObject(state).environmentObject(state.models)
-                .frame(minWidth: 1080, minHeight: 760)
-        }
-        .defaultSize(width: 1240, height: 860)
-        .windowStyle(.hiddenTitleBar)
-        .commands { CommandGroup(replacing: .newItem) {} }
         MenuBarExtra("NiceTouch", systemImage: "hand.draw") {
-            MenuContent().environmentObject(state)
+            MenuContent(openWindow: delegate.openMainWindow).environmentObject(delegate.state)
         }
     }
 }
 private struct MenuContent: View {
     @EnvironmentObject var state: AppState
-    @Environment(\.openWindow) private var openWindow
+    let openWindow: () -> Void
     var body: some View {
-        Button("Open NiceTouch") { openWindow(id: "settings"); NSApp.activate(ignoringOtherApps: true) }
+        Button("Open NiceTouch", action: openWindow)
         Divider()
         Text(state.engineRunning ? "Gestures active" : "Gestures paused")
         Toggle("Require Fn key", isOn: $state.requireFn)
         Button(state.engineRunning ? "Pause gestures" : "Start gestures") {
-            if state.engineRunning { state.stopEngine() } else { state.startEngine(); if !state.warning.isEmpty { openWindow(id: "settings") } }
+            if state.engineRunning { state.stopEngine() } else { state.startEngine(); if !state.warning.isEmpty { openWindow() } }
         }
         Divider()
         Button("Quit NiceTouch") { state.stopEngine(); NSApp.terminate(nil) }.keyboardShortcut("q")

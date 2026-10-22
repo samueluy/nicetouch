@@ -8,6 +8,7 @@ private let accent = Color(red: 0.20, green: 0.43, blue: 0.34)
 struct MainView: View {
     @EnvironmentObject var state: AppState
     @EnvironmentObject var models: ModelProviderController
+    @EnvironmentObject var startup: StartupController
     var body: some View {
         HStack(spacing: 0) {
             sidebar
@@ -52,6 +53,14 @@ struct MainView: View {
             }.background(Color(nsColor: .windowBackgroundColor))
         }.foregroundStyle(ink).tint(accent)
         .sheet(isPresented: $state.showModel) { modelSettings }
+        .task { startup.preparePrompt() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in startup.refresh() }
+        .alert("Open NiceTouch when you log in?", isPresented: $startup.showPrompt) {
+            Button("Open at login") { Task { await startup.acceptPrompt() } }
+            Button("Not now", role: .cancel, action: startup.declinePrompt)
+        } message: {
+            Text("NiceTouch will start in the menu bar with its window hidden. Closing the window keeps the app running. You can change this in Settings.")
+        }
     }
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -162,6 +171,17 @@ struct MainView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     ModelProviderSettingsView(controller: models).disabled(state.busy)
+                    Divider()
+                    Text("Startup").font(.headline)
+                    Toggle("Open at login", isOn: Binding(get: { startup.isRegistered }, set: { value in
+                        Task { await startup.setEnabled(value) }
+                    })).disabled(startup.busy || !startup.isPackagedApp)
+                    Text(startup.statusMessage).font(.system(size: 11)).foregroundStyle(.secondary)
+                    if startup.status == .requiresApproval {
+                        Button("Open Login Items settings", action: startup.openLoginItems)
+                    }
+                    if !startup.problem.isEmpty { Text(startup.problem).font(.system(size: 12)).foregroundStyle(.orange).textSelection(.enabled) }
+                    Text("Closing the window keeps NiceTouch in the menu bar. Use Quit NiceTouch from its menu to stop the app.").font(.system(size: 11)).foregroundStyle(.secondary)
                     Divider()
                     Toggle("Require Fn key for gestures", isOn: $state.requireFn)
                     Text("Hold Fn before touching the trackpad and keep it held until the gesture ends.").font(.system(size: 11)).foregroundStyle(.secondary)
