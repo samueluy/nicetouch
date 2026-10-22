@@ -53,6 +53,9 @@ struct MainView: View {
             }.background(Color(nsColor: .windowBackgroundColor))
         }.foregroundStyle(ink).tint(accent)
         .sheet(isPresented: $state.showModel) { modelSettings }
+        .sheet(isPresented: $state.showLibrary) {
+            PromptLibraryView(isBusy: state.busy || models.busy, use: state.useSuggestion)
+        }
         .task { startup.preparePrompt() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in startup.refresh() }
         .alert("Open NiceTouch when you log in?", isPresented: $startup.showPrompt) {
@@ -112,7 +115,12 @@ struct MainView: View {
     }
     private var composer: some View {
         VStack(alignment: .leading, spacing: 13) {
-            HStack { Text("New gesture").font(.system(size: 16, weight: .medium)); Spacer(); Image(systemName: "sparkle").foregroundStyle(accent) }
+            HStack {
+                Text("New gesture").font(.system(size: 16, weight: .medium))
+                Spacer()
+                Button { state.showLibrary = true } label: { Label("Browse suggestions", systemImage: "books.vertical") }
+                    .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(accent)
+            }
             Text("Enter the gesture, app and action, then review the rule.").font(.system(size: 11)).foregroundStyle(.secondary)
             ZStack(alignment: .topLeading) {
                 if state.command.isEmpty { Text("When I swipe three fingers left in Chrome, switch to the previous tab.").font(.system(size: 13)).foregroundStyle(.tertiary).padding(12).allowsHitTesting(false) }
@@ -137,6 +145,11 @@ struct MainView: View {
                 detail("In", rule.appLabel)
                 detail("Zone", rule.gesture.zone.rawValue.capitalized)
                 detail("Action", rule.action.label)
+                if let bundleID = rule.action.launchBundleIdentifier {
+                    let installed = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) != nil
+                    Label(installed ? "App installed" : "Install the app before using this gesture", systemImage: installed ? "checkmark.circle" : "exclamationmark.triangle")
+                        .font(.system(size: 10)).foregroundStyle(installed ? Color.secondary : Color.orange)
+                }
                 Divider()
                 DisclosureGroup("Structured rule") {
                     ScrollView([.horizontal, .vertical]) { Text(rule.json).font(.system(size: 10, design: .monospaced)).textSelection(.enabled).padding(.vertical, 9) }.frame(height: 175)
@@ -211,6 +224,9 @@ struct TrackpadView: View {
                 if let rule {
                     zone(rule.gesture.zone)
                     VStack(spacing: 17) {
+                        if rule.gesture.kind == .drawC {
+                            CStrokePreview().stroke(accent.opacity(enabled ? 0.9 : 0.4), style: StrokeStyle(lineWidth: 4, lineCap: .round)).frame(width: 90, height: 90)
+                        } else {
                         HStack(spacing: 10) {
                             ForEach(0..<rule.gesture.fingers, id: \.self) { _ in
                                 Capsule().fill(accent.opacity(enabled ? 0.19 : 0.08)).frame(width: 23, height: 43)
@@ -218,6 +234,7 @@ struct TrackpadView: View {
                             }
                         }
                         Image(systemName: rule.gesture.symbol).font(.system(size: 25, weight: .ultraLight)).foregroundStyle(accent.opacity(enabled ? 0.9 : 0.4))
+                        }
                         Text(rule.gesture.label.uppercased()).font(.system(size: 9, weight: .medium, design: .monospaced)).tracking(1.8).foregroundStyle(.secondary)
                     }
                     VStack { Spacer(); HStack { Text(rule.gesture.zone == .anywhere ? "FULL SURFACE" : rule.gesture.zone.rawValue.uppercased() + " EDGE"); Spacer(); Text(preview ? "PREVIEW" : enabled ? "MAPPED" : "DISABLED") }.font(.system(size: 8, design: .monospaced)).tracking(1).foregroundStyle(.tertiary).padding(18) }
@@ -241,5 +258,16 @@ struct TrackpadView: View {
             }()
             Rectangle().fill(accent.opacity(enabled ? 0.045 : 0.015)).frame(width: rect.width, height: rect.height).position(x: rect.midX, y: rect.midY)
         }.clipShape(RoundedRectangle(cornerRadius: 23))
+    }
+}
+
+private struct CStrokePreview: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: rect.minX + rect.width * x, y: rect.minY + rect.height * y) }
+        path.move(to: point(0.8, 0.15))
+        path.addCurve(to: point(0.18, 0.5), control1: point(0.45, -0.05), control2: point(0.14, 0.15))
+        path.addCurve(to: point(0.8, 0.85), control1: point(0.14, 0.85), control2: point(0.45, 1.05))
+        return path
     }
 }

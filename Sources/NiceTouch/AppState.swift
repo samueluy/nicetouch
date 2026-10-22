@@ -20,6 +20,7 @@ import NiceTouchModels
     @Published var engineRunning = false
     @Published var lastEvent = "Gestures paused"
     @Published var showModel = false
+    @Published var showLibrary = false
     let models: ModelProviderController
     private let engine = RuntimeEngine()
     private var loadFailed = false
@@ -38,6 +39,10 @@ import NiceTouchModels
     }
     var conflicts: [SavedRule] { draft.map { RuleValidator.conflicts($0, with: rules) } ?? [] }
     var selectedRule: RuleDefinition? { draft ?? rules.first(where: { $0.id == selected })?.definition }
+    func useSuggestion(_ suggestion: PromptSuggestion) {
+        guard !busy, !models.busy else { return }
+        discardPreview(); selected = nil; command = suggestion.command
+    }
     func generate() {
         guard !busy, !models.busy, models.status.canGenerate, !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         busy = true; draft = nil; rawJSON = ""; warning = ""
