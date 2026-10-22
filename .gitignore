@@ -1,0 +1,33 @@
+# Build products and local dependencies
+.build/
+.swiftpm/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+dist/
+models/
+
+# Local settings and operating-system files
+.DS_Store
+xcuserdata/
+*.xcuserstate
+*.log
+.env
+.env.*
+!.env.example
+/rules.json
+*.local.json
+
+# Signing material and credentials
+*.pem
+*.key
+*.p12
+*.pfx
+*.mobileprovision
+*.provisionprofile
+
+# Personal launch copy and private working notes
+/Docs/LAUNCH.md
+.private/
+.codex/
