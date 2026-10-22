@@ -1,0 +1,50 @@
+[
+  {
+    "id": "00000000-0000-0000-0000-000000000001",
+    "enabled": false,
+    "definition": {
+      "version": 1,
+      "name": "Previous tab",
+      "app": "com.google.Chrome",
+      "gesture": {
+        "kind": "swipe",
+        "fingers": 3,
+        "direction": "left",
+        "zone": "anywhere"
+      },
+      "action": "previousTab"
+    }
+  },
+  {
+    "id": "00000000-0000-0000-0000-000000000002",
+    "enabled": false,
+    "definition": {
+      "version": 1,
+      "name": "Next tab",
+      "app": "com.google.Chrome",
+      "gesture": {
+        "kind": "swipe",
+        "fingers": 3,
+        "direction": "right",
+        "zone": "anywhere"
+      },
+      "action": "nextTab"
+    }
+  },
+  {
+    "id": "00000000-0000-0000-0000-000000000003",
+    "enabled": false,
+    "definition": {
+      "version": 1,
+      "name": "Reopen closed tab",
+      "app": "*",
+      "gesture": {
+        "kind": "tap",
+        "fingers": 4,
+        "direction": "none",
+        "zone": "top"
+      },
+      "action": "reopenTab"
+    }
+  }
+]
