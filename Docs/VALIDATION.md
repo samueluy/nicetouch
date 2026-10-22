@@ -8,14 +8,15 @@ NiceTouch is an experimental developer preview. Automated checks cover rule crea
 
 | Check | Result |
 | --- | --- |
-| `swift test` | 76 tests passed, zero failures. |
-| `swift run ModelProbe --check-cases` | Eight live Apple Intelligence cases passed. |
+| `swift test` | 93 tests passed, zero failures. |
+| `swift run ModelProbe --check-cases` | Ten live Apple Intelligence cases passed, including ChatGPT/Codex C-drawing rules. |
 | `zsh Scripts/build-app.sh` | Release build, ad-hoc signing and packaged resource checks passed. |
+| C-rule preview | A library suggestion generated a valid one-finger C / Open Codex rule, displayed its C trace and installed-app status, and allowed explicit saving. The test preview was discarded. |
 | Rule conflict preview | A Chrome next-tab rule overlapping an enabled previous-tab rule named the existing assignment and disabled Save. |
 | Menu-bar lifecycle | Closing the main window left the process running in accessory mode; reopening displayed the window. |
 | Login Items settings | The packaged app reported the registered state from macOS. A full logout/login cycle remains unverified. |
 
-The live model checks covered three complete commands with expected app, gesture, zone and action, plus five incomplete, unsupported or contradictory commands that required clarification. Complete-rule generation took about 11–20 seconds in that run. These timings describe rule authoring, not gesture execution, and are not a performance guarantee.
+The latest live model checks covered five complete commands with expected app, gesture, zone and action, plus five incomplete, unsupported or contradictory commands that required clarification. Complete-rule generation took about 12–36 seconds in that run. These timings describe rule authoring, not gesture execution, and are not a performance guarantee.
 
 ## Automated coverage
 
@@ -23,6 +24,9 @@ The live model checks covered three complete commands with expected app, gesture
 - Synthetic touch trajectories, ambiguous matching and persistence failures.
 - Fn sequence admission, late presses and cancellation.
 - Source-intent checks, selected-provider routing and bounded repair.
+- All 12 prompt suggestions validate against their stated intent; search/category filtering and conflicting launch suggestions have coverage.
+- C recognition from synthetic paths in either stroke direction, noise/scale variation, bounded dense traces, invalid input, extra fingers and rejection of circles/mirrored letters.
+- Guided Apple C output and API C-launch replies through full authoring validation.
 - API request privacy, malformed replies, redirects and endpoint credential isolation.
 - Startup prompt persistence, registration/disable behavior, approval/error states, unpackaged launches and login-event detection.
 
@@ -52,12 +56,15 @@ For a custom MLX model, install the optional dependencies described in the READM
 
 This smoke check calls the local worker; it does not execute keyboard actions or change saved rules. Model quality can cause a check to fail even when the worker loads.
 
+The library UI was checked for search, category filtering, empty results and selecting a prompt without saving a rule. C drawings require physical trackpad verification; synthetic recognition results do not establish hardware accuracy.
+
 ## Hardware and release checklist
 
 Record the Mac model, macOS version, build revision and observed behavior when reporting results. Use sample rules and redact personal information.
 
 - [ ] Accessibility approval and fixed keyboard actions in Chrome/Safari.
 - [ ] Physical Fn admission, late-press rejection and release cancellation.
+- [ ] One-finger C recognition and ChatGPT/Codex app launching with Fn held.
 - [ ] Three/four-finger gestures and edge zones on a built-in trackpad.
 - [ ] One action per gesture and cancellation after switching apps.
 - [ ] Pause/sleep stopping input and manual restart after wake.

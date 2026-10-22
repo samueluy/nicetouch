@@ -12,6 +12,7 @@ Native SwiftUI · Apple Intelligence by default · Optional MLX or API models ·
 
 ## Features
 
+- **Browse prompt suggestions.** Search 12 editable examples for opening apps, browser tabs and editing. Choose a prompt, then review the generated rule.
 - **Describe a gesture in plain English.** Specify the app, finger count, motion and action. Review the structured result before saving.
 - **Use Apple's on-device model by default.** On an eligible Mac, create rules without installing Python or choosing separate model weights.
 - **Choose your model.** Load a custom local MLX model or configure an API endpoint that supports strict JSON-schema Chat Completions.
@@ -70,7 +71,13 @@ Login launches keep the window hidden and show the menu-bar item. Closing the wi
 
 ## Sample commands
 
+Select **Browse suggestions** beside **New gesture** to open the prompt library. Search by app, action or gesture, or filter by Apps, Browser tabs and Editing. **Use prompt** fills the editor; it does not generate, save or enable a rule.
+
 Try one rule at a time and check for overlap with enabled rules:
+
+> Open ChatGPT when I draw a C.
+
+> Open Codex when I draw a C with one finger in all apps.
 
 > When I swipe three fingers left in Chrome, switch to the previous tab.
 
@@ -84,13 +91,13 @@ Try one rule at a time and check for overlap with enabled rules:
 
 > When I tap three fingers in Safari, undo.
 
-Supported gestures are three- or four-finger swipes and short taps. Swipe directions are left, right, up and down. Edge zones use the starting finger centroid in the outer quarter of the trackpad. Direction follows physical motion, independent of natural scrolling.
+Supported gestures are three- or four-finger swipes and short taps, plus one-finger C drawings. Hold Fn before drawing, leave the C opening on the right, then lift your finger. Either stroke direction is supported. C drawings use a fixed local template matcher; other letters are unsupported and physical recognition still needs hardware tuning. The ChatGPT and Codex C suggestions share a trigger, so choose one or change its scope/gesture. Swipe directions are left, right, up and down. Edge zones use the starting finger centroid in the outer quarter of the trackpad. Direction follows physical motion, independent of natural scrolling.
 
-Supported actions are `previousTab`, `nextTab`, `closeTab`, `reopenTab`, `copy`, `paste`, `undo` and `redo`. NiceTouch sends fixed Mac keyboard shortcuts, so behavior can vary by app. It does not run scripts, shell commands or model-generated code. Incomplete or contradictory requests ask for clarification; English is the current command-validation language.
+Supported actions are `previousTab`, `nextTab`, `closeTab`, `reopenTab`, `copy`, `paste`, `undo`, `redo`, `openChatGPT` and `openCodex`. Keyboard actions use fixed Mac shortcuts, so behavior can vary by app. The two app actions open installed macOS applications through fixed bundle identifiers; they do not open a website or accept arbitrary executable paths. If the app is missing, the preview and runtime report it. App-opening commands default to all apps when no source app is named. It does not run scripts, shell commands or model-generated code. Incomplete or contradictory requests ask for clarification; English is the current command-validation language.
 
 ## Local AI and model choices
 
-AI runs during rule creation. You review the result before saving. The gesture engine reads saved rules and sends fixed shortcuts without consulting a model.
+AI runs during rule creation. You review the result before saving. The gesture engine reads saved rules and runs fixed shortcuts or app launches without consulting a model.
 
 ### Apple Intelligence: default
 
@@ -185,6 +192,23 @@ Taps use `"direction": "none"`. This rule reopens a tab with a four-finger tap a
 }
 ```
 
+A one-finger C can open ChatGPT from any app:
+
+```json
+{
+  "version": 1,
+  "name": "Open ChatGPT",
+  "app": "*",
+  "gesture": {
+    "kind": "drawC",
+    "fingers": 1,
+    "direction": "none",
+    "zone": "anywhere"
+  },
+  "action": "openChatGPT"
+}
+```
+
 These are rule definitions. The persisted collection wraps each definition with an `id` and `enabled` flag, as shown in [Samples/rules.json](Samples/rules.json). The [JSON Schema](Schema/rule.schema.json) defines the format. Fn activation is an app setting, not a rule field. There is no JSON import UI yet.
 
 Enabled rules conflict when their gesture, app scope and zones overlap, regardless of action. Global rules overlap app-specific rules; perpendicular edge zones overlap at corners. Different directions and opposite edges can coexist. If the runtime still finds ambiguous matches, it sends no action.
@@ -198,7 +222,7 @@ Command → selected model → strict JSON + intent checks
 
 RUN A GESTURE
 Built-in trackpad → C bridge → Fn sequence gate → gesture recognizer
-                  → app + zone matching → fixed keyboard shortcut
+                  → app + zone matching → fixed shortcut or app launch
 ```
 
 | Module | Responsibility |
@@ -218,7 +242,7 @@ The runtime uses an in-memory rule snapshot. It performs no model calls, JSON pa
 - **Hardware testing:** Accessibility approval, physical Fn behavior, gesture recognition and shortcut delivery still need end-to-end verification. There is no measured release latency claim.
 - **Built-in trackpads only:** external Magic Trackpads and Intel Macs are unverified or unsupported by the current implementation.
 - **System gesture overlap:** NiceTouch observes input and does not consume macOS gestures. Disable conflicting system mappings before testing.
-- **Limited vocabulary:** gesture types, finger counts and actions form a fixed set. English source validation can reject phrasing that a model understands. Multilingual command support is unverified.
+- **Limited vocabulary:** gesture types, finger counts and actions form a fixed set. C is the only supported drawn letter, and app launch targets are limited to ChatGPT and Codex. English source validation can reject phrasing that a model understands. Multilingual command support is unverified.
 - **Provider compatibility:** API tests use a stub transport; live third-party endpoints need verification. Custom model behavior depends on weights and Python dependencies.
 - **Distribution:** the local app uses ad-hoc signing. Developer ID signing, notarization and an installer remain future work. Light appearance and older supported macOS versions need further checks.
 
