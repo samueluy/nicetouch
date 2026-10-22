@@ -20,6 +20,7 @@ public enum RuleAuthoringPipeline {
             try Task.checkCancellation()
             let input = try RuleModelRequest(command: request.command, feedback: feedback, localAppContext: request.localAppContext, knownApps: request.knownApps)
             let output = try await provider.generate(input)
+            try Task.checkCancellation()
             if let object = try? JSONSerialization.jsonObject(with: Data(output.utf8)) as? [String: Any],
                Set(object.keys) == ["error"], let question = object["error"] as? String,
                !question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return output }

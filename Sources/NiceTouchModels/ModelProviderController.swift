@@ -21,11 +21,12 @@ import AppKit
     private let defaults: UserDefaults
     private let secrets: any APISecretStore
     private let customLocal: CustomLocalModelProvider?
+    private let providerOverride: ModelProviderRegistry?
     private var refreshRevision: UInt64 = 0
     private var refreshTask: Task<Void, Never>?
     private static let apiConfigKey = "NiceTouch.apiConfiguration"
-    public init(customLocal: CustomLocalModelProvider? = nil, defaults: UserDefaults = .standard, secrets: any APISecretStore = KeychainAPISecretStore()) {
-        self.customLocal = customLocal; self.defaults = defaults; self.secrets = secrets
+    public init(customLocal: CustomLocalModelProvider? = nil, defaults: UserDefaults = .standard, secrets: any APISecretStore = KeychainAPISecretStore(), providers: ModelProviderRegistry? = nil) {
+        self.customLocal = customLocal; self.defaults = defaults; self.secrets = secrets; providerOverride = providers
         selection = ModelProviderPreferences.selection(in: defaults)
         let saved = defaults.data(forKey: Self.apiConfigKey).flatMap { try? JSONDecoder().decode(APIConfiguration.self, from: $0) } ?? APIConfiguration()
         apiBaseURL = saved.baseURL; apiModel = saved.model; apiRequiresKey = saved.requiresAPIKey
@@ -51,6 +52,7 @@ import AppKit
         }
     }
     private func registry() -> ModelProviderRegistry {
+        if let providerOverride { return providerOverride }
         let local: any RuleModelProvider = customLocal ?? UnavailableRuleModel("Connect the existing MLX backend to load a custom local model.")
         return ModelProviderRegistry(customLocal: local, api: APIRuleProvider(configuration: apiConfiguration, secrets: secrets))
     }
@@ -79,14 +81,26 @@ import AppKit
         guard !Task.isCancelled, revision == refreshRevision, selection == selected else { return }
         status = result; hasSavedAPIKey = hasKey
     }
+    public func markGenerationCancelled() {
+        if busy { activity = "Cancelling generation…" }
+    }
     public func generate(command: String, feedback: String = "", localAppContext: String = "") async throws -> String {
         guard !busy else { throw RuleModelError.unavailable("Wait for the current model operation to finish.") }
         let selected = selection, service = registry()
         let request = try RuleModelRequest(command: command, feedback: feedback, localAppContext: localAppContext)
         busy = true; problem = ""; activity = selected == .api ? "Waiting for API…" : "Generating rule on this Mac…"
         defer { busy = false; activity = "" }
-        do { return try await service.generate(request, using: selected) }
-        catch { problem = error.localizedDescription; throw error }
+        do {
+            try Task.checkCancellation()
+            let result = try await service.generate(request, using: selected)
+            try Task.checkCancellation()
+            return result
+        } catch {
+            let readiness = await service.readiness(for: selected)
+            if selection == selected { status = readiness }
+            if Task.isCancelled || error is CancellationError { throw CancellationError() }
+            problem = error.localizedDescription; throw error
+        }
     }
     public func author(command: String, localAppContext: String = "", knownApps: [String: String] = [:], validate: @Sendable (String) throws -> Void) async throws -> String {
         guard !busy else { throw RuleModelError.unavailable("Wait for the current model operation to finish.") }
@@ -94,8 +108,17 @@ import AppKit
         let request = try RuleModelRequest(command: command, localAppContext: localAppContext, knownApps: knownApps)
         busy = true; problem = ""; activity = selected == .api ? "Waiting for API…" : "Generating rule on this Mac…"
         defer { busy = false; activity = "" }
-        do { return try await service.author(request, using: selected, validate: validate) }
-        catch { problem = error.localizedDescription; throw error }
+        do {
+            try Task.checkCancellation()
+            let result = try await service.author(request, using: selected, validate: validate)
+            try Task.checkCancellation()
+            return result
+        } catch {
+            let readiness = await service.readiness(for: selected)
+            if selection == selected { status = readiness }
+            if Task.isCancelled || error is CancellationError { throw CancellationError() }
+            problem = error.localizedDescription; throw error
+        }
     }
     public func saveAPIKey() async {
         guard !busy else { return }
