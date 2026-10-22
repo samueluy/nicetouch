@@ -85,11 +85,20 @@ private func receiveFrame(_ device: UInt, _ xs: UnsafePointer<Float>?, _ ys: Uns
         if requireFn && !CGEventSource.flagsState(.hidSystemState).contains(.maskSecondaryFn) {
             cancelFnSequences(); return
         }
-        guard post(rule.definition.action) else { onEvent?("Could not create keyboard events."); return }
+        guard execute(rule.definition.action) else { return }
         lastExecution = time
         onEvent?("\(rule.definition.action.label) · \(rule.definition.appLabel)")
     }
-    private func post(_ action: RuleAction) -> Bool {
+    private func execute(_ action: RuleAction) -> Bool {
+        if let bundleID = action.launchBundleIdentifier {
+            guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
+                onEvent?("\(action.label.replacingOccurrences(of: "Open ", with: "")) is not installed on this Mac."); return false
+            }
+            NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration()) { [weak self] _, error in
+                if let error { Task { @MainActor in self?.onEvent?("Could not open app: " + error.localizedDescription) } }
+            }
+            return true
+        }
         let key: CGKeyCode
         let flags: CGEventFlags
         switch action {
@@ -101,10 +110,11 @@ private func receiveFrame(_ device: UInt, _ xs: UnsafePointer<Float>?, _ ys: Uns
         case .paste: key = 9; flags = .maskCommand
         case .undo: key = 6; flags = .maskCommand
         case .redo: key = 6; flags = [.maskCommand, .maskShift]
+        case .openChatGPT, .openCodex: return false
         }
         guard let source = CGEventSource(stateID: .privateState),
               let down = CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: true),
-              let up = CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: false) else { return false }
+              let up = CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: false) else { onEvent?("Could not create keyboard events."); return false }
         down.flags = flags; up.flags = flags
         down.post(tap: .cghidEventTap); up.post(tap: .cghidEventTap)
         return true

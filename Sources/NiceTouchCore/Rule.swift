@@ -1,6 +1,6 @@
 import Foundation
 
-public enum GestureKind: String, Codable, CaseIterable, Sendable { case swipe, tap }
+public enum GestureKind: String, Codable, CaseIterable, Sendable { case swipe, tap, drawC }
 public enum Direction: String, Codable, CaseIterable, Sendable { case left, right, up, down, none }
 public enum Zone: String, Codable, CaseIterable, Sendable {
     case anywhere, left, right, top, bottom
@@ -20,7 +20,7 @@ public enum Zone: String, Codable, CaseIterable, Sendable {
     }
 }
 public enum RuleAction: String, Codable, CaseIterable, Sendable {
-    case previousTab, nextTab, closeTab, reopenTab, copy, paste, undo, redo
+    case previousTab, nextTab, closeTab, reopenTab, copy, paste, undo, redo, openChatGPT, openCodex
     public var label: String {
         switch self {
         case .previousTab: return "Previous tab"
@@ -31,6 +31,17 @@ public enum RuleAction: String, Codable, CaseIterable, Sendable {
         case .paste: return "Paste"
         case .undo: return "Undo"
         case .redo: return "Redo"
+        case .openChatGPT: return "Open ChatGPT"
+        case .openCodex: return "Open Codex"
+        }
+    }
+}
+public extension RuleAction {
+    var launchBundleIdentifier: String? {
+        switch self {
+        case .openChatGPT: return "com.openai.chat"
+        case .openCodex: return "com.openai.codex"
+        default: return nil
         }
     }
 }
@@ -43,10 +54,12 @@ public struct Gesture: Codable, Equatable, Sendable {
         self.kind = kind; self.fingers = fingers; self.direction = direction; self.zone = zone
     }
     public var label: String {
-        "\(fingers)-finger \(kind.rawValue)" + (direction == .none ? "" : " \(direction.rawValue)")
+        if kind == .drawC { return "Draw C with one finger" }
+        return "\(fingers)-finger \(kind.rawValue)" + (direction == .none ? "" : " \(direction.rawValue)")
     }
     public var symbol: String {
         if kind == .tap { return "hand.tap" }
+        if kind == .drawC { return "c.circle" }
         return "arrow." + (direction == .up ? "up" : direction == .down ? "down" : direction.rawValue)
     }
 }
@@ -107,9 +120,13 @@ public enum RuleValidator {
         guard rule.app == "*" || (rule.app.count <= 200 && rule.app.range(of: "^[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)+$", options: .regularExpression) != nil) else {
             throw RuleError("Use * for all apps or an exact app bundle identifier, such as com.google.Chrome.")
         }
-        guard [3, 4].contains(rule.gesture.fingers) else { throw RuleError("Choose three or four fingers.") }
-        guard (rule.gesture.kind == .tap) == (rule.gesture.direction == .none) else {
-            throw RuleError("Taps require direction none; swipes require left, right, up, or down.")
+        if rule.gesture.kind == .drawC {
+            guard rule.gesture.fingers == 1 else { throw RuleError("Draw C with one finger.") }
+        } else {
+            guard [3, 4].contains(rule.gesture.fingers) else { throw RuleError("Choose three or four fingers for swipes and taps.") }
+        }
+        guard (rule.gesture.kind != .swipe) == (rule.gesture.direction == .none) else {
+            throw RuleError("Taps and C drawings require direction none; swipes require left, right, up, or down.")
         }
     }
     public static func conflicts(_ candidate: RuleDefinition, with rules: [SavedRule], excluding: UUID? = nil) -> [SavedRule] {

@@ -12,6 +12,7 @@ public struct RecognizedGesture: Sendable {
 }
 /// One independent recognizer per device. Emit at most once, after every contact lifts.
 public struct GestureRecognizer {
+    private var cShape = CShapeRecognizer()
     private var start: Contact?
     private var count = 0
     private var began = 0.0
@@ -21,7 +22,15 @@ public struct GestureRecognizer {
     public init() {}
     public mutating func reset() { self = GestureRecognizer() }
     public mutating func feed(_ contacts: [Contact], time: Double) -> RecognizedGesture? {
-        guard time.isFinite, contacts.allSatisfy({ $0.x.isFinite && $0.y.isFinite && (0...1).contains($0.x) && (0...1).contains($0.y) }) else { reset(); return nil }
+        let drawing = cShape.feed(contacts, time: time)
+        return feedStandard(contacts, time: time) ?? drawing
+    }
+    private mutating func feedStandard(_ contacts: [Contact], time: Double) -> RecognizedGesture? {
+        guard time.isFinite, contacts.allSatisfy({ $0.x.isFinite && $0.y.isFinite && (0...1).contains($0.x) && (0...1).contains($0.y) }) else {
+            let drawing = cShape
+            reset(); cShape = drawing
+            return nil
+        }
         if contacts.isEmpty {
             defer { reset() }
             guard let start, !invalid, time >= began, time - began < 1.2 else { return nil }

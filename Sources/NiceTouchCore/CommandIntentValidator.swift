@@ -65,32 +65,54 @@ public enum CommandIntentValidator {
             if has(#"\b(?:previous|prev|preceding|earlier|back|backward|backwards)\b(?:\s+\w+){0,2}\s+tabs?\b|\btabs?\s+(?:back|backward|backwards)\b"#, in: command) { result.insert(.previousTab) }
         }
         if has(#"\b(?:next|following|forward|forwards)\b(?:\s+\w+){0,2}\s+tabs?\b|\btabs?\s+(?:forward|forwards|ahead)\b"#, in: command) { result.insert(.nextTab) }
+        if has(#"\b(?:open|launch|show|activate|focus)\b.*\bchat\s?gpt\b"#, in: command) { result.insert(.openChatGPT) }
+        if has(#"\b(?:open|launch|show|activate|focus)\b.*\bcodex\b"#, in: command) { result.insert(.openCodex) }
         return result
+    }
+    private static func drawingC(_ command: String) -> Bool {
+        has(#"\b(?:draw|drawing|trace|tracing)\s+(?:(?:a|the|letter)\s+){0,2}c\b|\bc shaped\b"#, in: command)
+    }
+    private static func sourceAppMentioned(_ command: String, knownApps: [String: String]) -> Bool {
+        let names = appAliases.values.flatMap { $0 } + Array(knownApps.values) + Array(knownApps.keys)
+        if has(#"\b(?:in|inside|within)\s+(?!(?:all|every|any)\s+(?:apps?|applications?))(?!(?:the\s+)?(?:top|bottom|left|right)\s+(?:zone|edge|side))"#, in: command) { return true }
+        return names.contains { name in
+            has("\\b(?:in|inside|within|using)\\s+(?:the\\s+)?" + NSRegularExpression.escapedPattern(for: text(name)) + "\\b", in: command)
+        }
     }
     public static func clarification(for command: String) -> String? {
         let command = text(command), counts = fingerCounts(command)
-        guard !counts.isEmpty else { return "Use three or four fingers. Which gesture, app and action should they trigger?" }
-        guard counts.count == 1 else { return "Choose one finger count for this rule: three or four." }
+        let drawing = drawingC(command)
+        if drawing {
+            if !counts.isEmpty || has(#"\b(?:0|[2-9]|[1-9][0-9]+|zero|two|five|six|seven|eight|nine)\s*fingers?\b"#, in: command) { return "Draw C with one finger. Swipes and taps use three or four fingers." }
+        } else {
+            if has(#"\b(?:draw|drawing|trace|tracing)\b"#, in: command) { return "C is the supported drawing gesture. Draw it with one finger, or use a three- or four-finger swipe or tap." }
+            guard !counts.isEmpty else { return "Use three or four fingers. Which gesture, app and action should they trigger?" }
+            guard counts.count == 1 else { return "Choose one finger count for this rule: three or four." }
+        }
         let swipe = swipeMentioned(command), tap = tapMentioned(command)
-        guard swipe || tap else { return "Should this be a swipe or a tap?" }
-        guard !(swipe && tap) else { return "Choose one gesture for this rule: a swipe or a tap." }
+        guard swipe || tap || drawing else { return "Should this be a swipe, a tap or a C drawing?" }
+        guard [swipe, tap, drawing].filter({ $0 }).count == 1 else { return "Choose one gesture for this rule: a swipe, a tap or a C drawing." }
         if swipe && directions(command).count != 1 { return "Which direction should the swipe use: left, right, up or down?" }
         if has(#"\b(?:script|scripts|shell|applescript|javascript|python|terminal command)\b"#, in: command) {
-            return "Scripts are not supported. Choose a tab action, copy, paste, undo or redo."
+            return "Scripts are not supported. Choose a tab action, copy, paste, undo, redo, Open ChatGPT or Open Codex."
         }
         let supported = actions(command)
-        if supported.isEmpty { return "Choose an action: previous tab, next tab, close tab, reopen tab, copy, paste, undo or redo." }
+        if supported.isEmpty { return "Choose an action: previous tab, next tab, close tab, reopen tab, copy, paste, undo, redo, Open ChatGPT or Open Codex." }
         if supported.count > 1 { return "Choose one action for this gesture. Create a separate rule for another action." }
         return nil
     }
     public static func validate(_ rule: RuleDefinition, command: String, knownApps: [String: String] = [:]) throws {
         if let question = clarification(for: command) { throw CommandIntentError.clarification(question) }
         let command = text(command)
-        guard fingerCounts(command).contains(rule.gesture.fingers) else { throw CommandIntentError.mismatch("Use the finger count stated in the command.") }
-        guard rule.gesture.kind == .swipe ? swipeMentioned(command) : tapMentioned(command) else { throw CommandIntentError.mismatch("Use the gesture type stated in the command.") }
+        if drawingC(command) {
+            guard rule.gesture.kind == .drawC, rule.gesture.fingers == 1 else { throw CommandIntentError.mismatch("Use drawC with one finger for the requested C drawing.") }
+        } else {
+            guard fingerCounts(command).contains(rule.gesture.fingers) else { throw CommandIntentError.mismatch("Use the finger count stated in the command.") }
+            guard rule.gesture.kind == .swipe ? swipeMentioned(command) : tapMentioned(command) else { throw CommandIntentError.mismatch("Use the gesture type stated in the command.") }
+        }
         if rule.gesture.kind == .swipe && !directions(command).contains(rule.gesture.direction) { throw CommandIntentError.mismatch("Use the swipe direction stated in the command.") }
         guard actions(command).contains(rule.action) else { throw CommandIntentError.mismatch("Use the requested action; do not substitute another supported action.") }
-        if allApps(command) {
+        if allApps(command) || (rule.action.launchBundleIdentifier != nil && !sourceAppMentioned(command, knownApps: knownApps)) {
             guard rule.app == "*" else { throw CommandIntentError.mismatch("The user requested all apps. Set app to * instead of a specific app.") }
         } else {
             guard rule.app != "*" else { throw CommandIntentError.clarification("Which app should use this gesture? Use all apps if you want a global rule.") }
