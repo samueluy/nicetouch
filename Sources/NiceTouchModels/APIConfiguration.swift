@@ -52,13 +52,13 @@ public enum APIRuleSchema {
         }
         func choice(_ values: [String]) -> [String: Any] { ["type": "string", "enum": values] }
         let gesture = object([
-            "kind": choice(["swipe", "tap"]), "fingers": ["type": "integer", "enum": [3, 4]],
+            "kind": choice(["swipe", "tap", "drawC"]), "fingers": ["type": "integer", "enum": [1, 3, 4]],
             "direction": choice(["left", "right", "up", "down", "none"]),
             "zone": choice(["anywhere", "left", "right", "top", "bottom"])
         ])
         let definition = object([
             "version": ["type": "integer", "enum": [1]], "name": ["type": "string"], "app": ["type": "string"], "gesture": gesture,
-            "action": choice(["previousTab", "nextTab", "closeTab", "reopenTab", "copy", "paste", "undo", "redo"])
+            "action": choice(["previousTab", "nextTab", "closeTab", "reopenTab", "copy", "paste", "undo", "redo", "openChatGPT", "openCodex"])
         ])
         let ready = object(["kind": choice(["rule"]), "definition": definition])
         let question = object(["kind": choice(["clarification"]), "question": ["type": "string"]])

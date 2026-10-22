@@ -10,27 +10,60 @@ import FoundationModels
 @available(macOS 26.0, *)
 @Generable enum AppleZone: String { case anywhere, left, right, top, bottom }
 @available(macOS 26.0, *)
-@Generable enum AppleAction: String { case previousTab, nextTab, closeTab, reopenTab, copy, paste, undo, redo }
+@Generable enum AppleAction: String { case previousTab, nextTab, closeTab, reopenTab, copy, paste, undo, redo, openChatGPT, openCodex }
 @available(macOS 26.0, *)
 @Generable enum AppleGesture {
     case swipe(fingers: AppleFingerCount, direction: AppleSwipeDirection, zone: AppleZone)
     case tap(fingers: AppleFingerCount, zone: AppleZone)
+    case drawC(zone: AppleZone)
+}
+@available(macOS 26.0, *)
+@Generable enum AppleSourceApp {
+    case allApps, chrome, safari, firefox, xcode, vsCode
+    case other(bundleIdentifier: String)
+    var bundleIdentifier: String {
+        switch self {
+        case .allApps: return "*"
+        case .chrome: return "com.google.Chrome"
+        case .safari: return "com.apple.Safari"
+        case .firefox: return "org.mozilla.firefox"
+        case .xcode: return "com.apple.dt.Xcode"
+        case .vsCode: return "com.microsoft.VSCode"
+        case .other(let bundleIdentifier): return bundleIdentifier
+        }
+    }
+    init(bundleIdentifier: String) {
+        switch bundleIdentifier {
+        case "*": self = .allApps
+        case "com.google.Chrome": self = .chrome
+        case "com.apple.Safari": self = .safari
+        case "org.mozilla.firefox": self = .firefox
+        case "com.apple.dt.Xcode": self = .xcode
+        case "com.microsoft.VSCode": self = .vsCode
+        default: self = .other(bundleIdentifier: bundleIdentifier)
+        }
+    }
 }
 @available(macOS 26.0, *)
 @Generable struct AppleRule {
     @Guide(description: "Short action label, without slogans.") var name: String
-    @Guide(description: "Exact app bundle ID, or * only if the user explicitly asks for all apps.") var app: String
+    @Guide(description: "Where the gesture works. Choose allApps for global rules and app-opening commands without a named source app. This is not the app to launch.") var app: AppleSourceApp
     var gesture: AppleGesture
     var action: AppleAction
+    init(name: String, app: String, gesture: AppleGesture, action: AppleAction) {
+        self.name = name; self.app = AppleSourceApp(bundleIdentifier: app); self.gesture = gesture; self.action = action
+    }
     func json() throws -> String {
         let gestureObject: [String: Any]
         switch gesture {
         case .swipe(let fingers, let direction, let zone):
             gestureObject = ["kind": "swipe", "fingers": fingers.value, "direction": direction.rawValue, "zone": zone.rawValue]
+        case .drawC(let zone):
+            gestureObject = ["kind": "drawC", "fingers": 1, "direction": "none", "zone": zone.rawValue]
         case .tap(let fingers, let zone):
             gestureObject = ["kind": "tap", "fingers": fingers.value, "direction": "none", "zone": zone.rawValue]
         }
-        let object: [String: Any] = ["version": 1, "name": name, "app": app, "gesture": gestureObject, "action": action.rawValue]
+        let object: [String: Any] = ["version": 1, "name": name, "app": app.bundleIdentifier, "gesture": gestureObject, "action": action.rawValue]
         return String(decoding: try JSONSerialization.data(withJSONObject: object, options: .sortedKeys), as: UTF8.self)
     }
 }

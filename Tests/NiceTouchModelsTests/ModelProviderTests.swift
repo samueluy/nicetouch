@@ -1,4 +1,5 @@
 import XCTest
+import NiceTouchCore
 @testable import NiceTouchModels
 
 private final class MemorySecrets: APISecretStore, @unchecked Sendable {
@@ -192,6 +193,25 @@ final class ModelProviderTests: XCTestCase {
         let transport = StubHTTP(data: Data(repeating: 32, count: 262_145))
         do { _ = try await APIRuleProvider(configuration: config, secrets: secrets, transport: transport).generate(request()); XCTFail("Expected size error") }
         catch { XCTAssertEqual(error as? RuleModelError, .replyTooLarge) }
+    }
+    func testAPIDrawingLaunchSurvivesAuthoringValidation() async throws {
+        let secrets = MemorySecrets(); try secrets.setSecret("test-key", account: config.credentialAccount())
+        let rule = RuleDefinition(name: "Open Codex", app: "*", gesture: Gesture(kind: .drawC, fingers: 1, direction: .none), action: .openCodex)
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(rule.json.utf8)) as? [String: Any])
+        let transport = StubHTTP(data: try providerReply(result: ["kind": "rule", "definition": object]))
+        let provider = APIRuleProvider(configuration: config, secrets: secrets, transport: transport)
+        let output = try await RuleAuthoringPipeline.generate(RuleModelRequest(command: "Open Codex when I draw a C"), provider: provider) { _ = try RuleValidator.parse($0) }
+        XCTAssertEqual(try RuleValidator.parse(output), rule)
+    }
+    func testAppleGuidedDrawingMapsToOneFingerAndWhitelistedLaunch() throws {
+        guard #available(macOS 26.0, *) else { throw XCTSkip("Foundation Models requires macOS 26") }
+        let drawing = AppleRule(name: "Open ChatGPT", app: "*", gesture: .drawC(zone: .anywhere), action: .openChatGPT)
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(drawing.json().utf8)) as? [String: Any])
+        XCTAssertEqual(object["action"] as? String, "openChatGPT")
+        let gesture = try XCTUnwrap(object["gesture"] as? [String: Any])
+        XCTAssertEqual(gesture["kind"] as? String, "drawC")
+        XCTAssertEqual(gesture["fingers"] as? Int, 1)
+        XCTAssertEqual(gesture["direction"] as? String, "none")
     }
     func testAppleGuidedTypesMapTapAndSwipeToExistingRuleJSON() throws {
         guard #available(macOS 26.0, *) else { throw XCTSkip("Foundation Models requires macOS 26") }

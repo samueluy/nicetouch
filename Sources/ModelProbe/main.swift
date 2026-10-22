@@ -10,6 +10,7 @@ import NiceTouchModels
         let action: RuleAction?
     }
     static func main() async {
+        setbuf(stdout, nil)
         do { try await run() }
         catch { fputs("Model check failed: \(error.localizedDescription)\n", stderr); exit(1) }
     }
@@ -26,6 +27,8 @@ import NiceTouchModels
                 Case(command: "When I swipe three fingers left in Chrome, switch to the previous tab.", app: "com.google.Chrome", gesture: Gesture(kind: .swipe, fingers: 3, direction: .left), action: .previousTab),
                 Case(command: "When I tap four fingers in the top zone in Safari, reopen the closed tab.", app: "com.apple.Safari", gesture: Gesture(kind: .tap, fingers: 4, direction: .none, zone: .top), action: .reopenTab),
                 Case(command: "When I swipe four fingers up in all apps, copy.", app: "*", gesture: Gesture(kind: .swipe, fingers: 4, direction: .up), action: .copy),
+                Case(command: "Open ChatGPT when I draw a C", app: "*", gesture: Gesture(kind: .drawC, fingers: 1, direction: .none), action: .openChatGPT),
+                Case(command: "Open Codex when I draw a C with one finger in all apps.", app: "*", gesture: Gesture(kind: .drawC, fingers: 1, direction: .none), action: .openCodex),
                 Case(command: "Make my trackpad better", app: nil, gesture: nil, action: nil),
                 Case(command: "Swipe three fingers in Chrome to switch tabs", app: nil, gesture: nil, action: nil),
                 Case(command: "Tap four fingers in Safari to run my script", app: nil, gesture: nil, action: nil),
@@ -48,6 +51,8 @@ import NiceTouchModels
                     }
                     print("\(passed ? "PASS" : "FAIL") (\(String(format: "%.2f", Date().timeIntervalSince(started)))s): \(item.command)\n\(output)")
                     if !passed { failures += 1 }
+                } catch let error as InvalidRuleModelOutput {
+                    print("FAIL: \(item.command)\n\(error.localizedDescription)\n\(error.output)"); failures += 1
                 } catch {
                     print("FAIL: \(item.command)\n\(error.localizedDescription)"); failures += 1
                 }
