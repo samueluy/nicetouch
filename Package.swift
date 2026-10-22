@@ -10,6 +10,7 @@ let package = Package(
         .target(name: "NiceTouchCore"),
         .target(name: "NiceTouchModels", dependencies: ["NiceTouchCore"]),
         .executableTarget(name: "ModelProbe", dependencies: ["NiceTouchModels", "NiceTouchCore"]),
-        .testTarget(name: "NiceTouchCoreTests", dependencies: ["NiceTouchCore"])
+        .testTarget(name: "NiceTouchCoreTests", dependencies: ["NiceTouchCore"]),
+        .testTarget(name: "NiceTouchModelsTests", dependencies: ["NiceTouchModels", "NiceTouchCore"])
     ]
 )
