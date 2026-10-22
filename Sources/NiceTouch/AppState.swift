@@ -25,10 +25,11 @@ import NiceTouchModels
     private let engine = RuntimeEngine()
     private var loadFailed = false
     private var sleepObserver: NSObjectProtocol?
-    private let store = RuleStore(url: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("NiceTouch/rules.json"))
-    init() {
+    private let store: RuleStore
+    init(store: RuleStore? = nil) {
+        self.store = store ?? RuleStore(url: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("NiceTouch/rules.json"))
         models = ModelProviderController(customLocal: CustomLocalModelProvider(backend: LocalModel()))
-        do { rules = try store.load(); selected = rules.first?.id }
+        do { rules = try self.store.load(); selected = rules.first?.id }
         catch { loadFailed = true; warning = "Could not load rules. Your file has been preserved. \(error.localizedDescription)" }
         engine.rules = rules
         engine.requireFn = requireFn
