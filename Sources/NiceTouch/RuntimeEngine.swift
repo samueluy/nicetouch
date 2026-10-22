@@ -3,11 +3,28 @@ import ApplicationServices
 import NiceTouchCore
 import TrackpadBridge
 
+private let captureFence = CaptureSessionFence()
+
 private func receiveFrame(_ device: UInt, _ xs: UnsafePointer<Float>?, _ ys: UnsafePointer<Float>?, _ count: Int32, _ time: Double) {
-    guard count >= 0, count <= 16, let xs, let ys else { return }
+    guard let session = captureFence.snapshot(), count >= 0, count <= 16, let xs, let ys else { return }
     let contacts = (0..<Int(count)).map { Contact(x: Double(xs[$0]), y: Double(ys[$0])) }
     let fnPressed = CGEventSource.flagsState(.hidSystemState).contains(.maskSecondaryFn)
-    DispatchQueue.main.async { RuntimeEngine.current?.feed(device: device, contacts: contacts, time: time, fnPressed: fnPressed) }
+    DispatchQueue.main.async {
+        guard captureFence.accepts(session) else { return }
+        RuntimeEngine.current?.feed(device: device, contacts: contacts, time: time, fnPressed: fnPressed)
+    }
+}
+
+/// Testable boundaries around OS capture, permissions and action delivery.
+/// Production uses the real services; tests never register capture or post input.
+@MainActor struct RuntimeServices {
+    var hasAccessibility: () -> Bool = { AXIsProcessTrusted() }
+    var fnHeld: () -> Bool = { CGEventSource.flagsState(.hidSystemState).contains(.maskSecondaryFn) }
+    var activeApp: () -> String = { NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "" }
+    var startCapture: (NTFrameCallback) -> Bool = { NTStart($0) }
+    var stopCapture: () -> Void = { NTStop() }
+    var actionHandler: ((RuleAction) -> Bool)?
+    var installObservers = true
 }
 
 @MainActor final class RuntimeEngine {
@@ -25,39 +42,56 @@ private func receiveFrame(_ device: UInt, _ xs: UnsafePointer<Float>?, _ ys: Uns
     private var startApps: [UInt: String] = [:]
     private var lastExecution = -Double.infinity
     private var appObserver: NSObjectProtocol?
-    init() {
+    private let services: RuntimeServices
+    private var captureSession: UUID?
+    init(services: RuntimeServices? = nil) {
+        self.services = services ?? RuntimeServices()
+        guard self.services.installObservers else { return }
         appObserver = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in
-                guard let self else { return }
-                for device in self.startApps.keys { self.startApps[device] = "" }
+                self?.cancelForAppSwitch()
             }
         }
     }
     func start() throws {
         guard !running else { return }
-        guard AXIsProcessTrusted() else { throw RuleError("Grant NiceTouch Accessibility access in System Settings, then start the engine again.") }
+        guard services.hasAccessibility() else { throw RuleError("Grant NiceTouch Accessibility access in System Settings, then start the engine again.") }
+        if let previous = RuntimeEngine.current, previous !== self { previous.stop() }
         RuntimeEngine.current = self
-        guard NTStart(receiveFrame) else { throw RuleError("No supported built-in trackpad was found, or the experimental macOS API is unavailable.") }
+        let session = captureFence.begin(); captureSession = session
+        guard services.startCapture(receiveFrame) else {
+            captureFence.end(session); captureSession = nil; RuntimeEngine.current = nil
+            throw RuleError("No supported built-in trackpad was found, or the experimental macOS API is unavailable.")
+        }
         running = true
+        guard services.installObservers else { return }
         globalModifierMonitor = NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
             if !event.modifierFlags.contains(.function) {
-                Task { @MainActor in if self?.requireFn == true { self?.cancelFnSequences() } }
+                Task { @MainActor in if self?.captureSession == session, self?.requireFn == true { self?.cancelFnSequences() } }
             }
         }
         localModifierMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
             if !event.modifierFlags.contains(.function) {
-                Task { @MainActor in if self?.requireFn == true { self?.cancelFnSequences() } }
+                Task { @MainActor in if self?.captureSession == session, self?.requireFn == true { self?.cancelFnSequences() } }
             }
             return event
         }
     }
     func stop() {
-        running = false; NTStop()
+        let hadCapture = captureSession != nil
+        running = false
+        if let session = captureSession { captureFence.end(session) }
+        captureSession = nil
+        if RuntimeEngine.current === self { RuntimeEngine.current = nil }
+        if hadCapture { services.stopCapture() }
         if let monitor = globalModifierMonitor { NSEvent.removeMonitor(monitor) }
         if let monitor = localModifierMonitor { NSEvent.removeMonitor(monitor) }
         globalModifierMonitor = nil; localModifierMonitor = nil
         fnGates.removeAll(); recognizers.removeAll(); startApps.removeAll()
         lastExecution = -Double.infinity
+    }
+    func cancelForAppSwitch() {
+        for device in Array(startApps.keys) { startApps[device] = "" }
     }
     private func cancelFnSequences() {
         for device in Array(fnGates.keys) { fnGates[device]?.cancel() }
@@ -72,7 +106,7 @@ private func receiveFrame(_ device: UInt, _ xs: UnsafePointer<Float>?, _ ys: Uns
             recognizers.removeValue(forKey: device); startApps.removeValue(forKey: device)
             return
         }
-        let app = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
+        let app = services.activeApp()
         if startApps[device] == nil && !contacts.isEmpty { startApps[device] = app }
         if startApps[device] != nil && startApps[device] != app { startApps[device] = "" }
         var recognizer = recognizers[device] ?? GestureRecognizer()
@@ -81,8 +115,8 @@ private func receiveFrame(_ device: UInt, _ xs: UnsafePointer<Float>?, _ ys: Uns
         defer { if contacts.isEmpty { startApps.removeValue(forKey: device) } }
         guard let event, startApps[device] == app, time - lastExecution > 0.35,
               let rule = RuleMatcher.match(event, app: app, rules: rules) else { return }
-        guard AXIsProcessTrusted() else { stop(); onEvent?("Accessibility access was revoked. Engine stopped."); return }
-        if requireFn && !CGEventSource.flagsState(.hidSystemState).contains(.maskSecondaryFn) {
+        guard services.hasAccessibility() else { stop(); onEvent?("Accessibility access was revoked. Engine stopped."); return }
+        if requireFn && !services.fnHeld() {
             cancelFnSequences(); return
         }
         guard execute(rule.definition.action) else { return }
@@ -90,6 +124,7 @@ private func receiveFrame(_ device: UInt, _ xs: UnsafePointer<Float>?, _ ys: Uns
         onEvent?("\(rule.definition.action.label) · \(rule.definition.appLabel)")
     }
     private func execute(_ action: RuleAction) -> Bool {
+        if let handler = services.actionHandler { return handler(action) }
         if let bundleID = action.launchBundleIdentifier {
             guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
                 onEvent?("\(action.label.replacingOccurrences(of: "Open ", with: "")) is not installed on this Mac."); return false

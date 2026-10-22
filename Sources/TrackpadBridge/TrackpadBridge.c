@@ -3,6 +3,7 @@
 #include <dlfcn.h>
 #include <stddef.h>
 #include <math.h>
+#include <stdatomic.h>
 
 typedef struct { float x, y; } NTPoint;
 typedef struct { NTPoint position, velocity; } NTVector;
@@ -22,7 +23,8 @@ static void *library;
 static CFArrayRef devices;
 static Register unregisterFrame;
 static Stop stopDevice;
-static NTFrameCallback receiver;
+// Capture callbacks run off-main; start/stop must not race the callback pointer.
+static _Atomic(NTFrameCallback) receiver;
 static void frame(void *device, Touch *touches, int count, double time, int number) {
     (void)number;
     float xs[16], ys[16]; int active = 0;
@@ -33,7 +35,8 @@ static void frame(void *device, Touch *touches, int count, double time, int numb
         if (!isfinite(x) || !isfinite(y) || x < 0 || x > 1 || y < 0 || y > 1) return;
         xs[active] = x; ys[active++] = y;
     }
-    if (receiver) receiver((uintptr_t)device, xs, ys, active, time);
+    NTFrameCallback deliver = atomic_load_explicit(&receiver, memory_order_acquire);
+    if (deliver) deliver((uintptr_t)device, xs, ys, active, time);
 }
 bool NTStart(NTFrameCallback callback) {
     if (devices) return true;
@@ -50,7 +53,7 @@ bool NTStart(NTFrameCallback callback) {
     CFArrayRef found = create();
     if (!found) return false;
     CFMutableArrayRef accepted = CFArrayCreateMutable(NULL, 0, &kCFTypeArrayCallBacks);
-    receiver = callback;
+    atomic_store_explicit(&receiver, callback, memory_order_release);
     for (CFIndex i = 0; i < CFArrayGetCount(found); i++) {
         void *device = (void *)CFArrayGetValueAtIndex(found, i);
         if (!builtIn(device)) continue;
@@ -60,7 +63,7 @@ bool NTStart(NTFrameCallback callback) {
         CFArrayAppendValue(accepted, device);
     }
     CFRelease(found);
-    if (!CFArrayGetCount(accepted)) { CFRelease(accepted); receiver = NULL; return false; }
+    if (!CFArrayGetCount(accepted)) { CFRelease(accepted); atomic_store_explicit(&receiver, NULL, memory_order_release); return false; }
     devices = accepted;
     return true;
 }
