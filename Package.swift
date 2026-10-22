@@ -6,6 +6,7 @@ let package = Package(
         .library(name: "NiceTouchCore", targets: ["NiceTouchCore"])
     ],
     targets: [
-        .target(name: "NiceTouchCore")
+        .target(name: "NiceTouchCore"),
+        .testTarget(name: "NiceTouchCoreTests", dependencies: ["NiceTouchCore"])
     ]
 )
