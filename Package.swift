@@ -4,13 +4,15 @@ let package = Package(
     name: "NiceTouch", platforms: [.macOS(.v14)],
     products: [
         .library(name: "NiceTouchCore", targets: ["NiceTouchCore"]),
-        .executable(name: "ModelProbe", targets: ["ModelProbe"])
+        .executable(name: "ModelProbe", targets: ["ModelProbe"]),
+        .executable(name: "NiceTouch", targets: ["NiceTouch"])
     ],
     targets: [
         .target(name: "NiceTouchCore"),
         .target(name: "NiceTouchModels", dependencies: ["NiceTouchCore"]),
         .executableTarget(name: "ModelProbe", dependencies: ["NiceTouchModels", "NiceTouchCore"]),
         .target(name: "TrackpadBridge", linkerSettings: [.linkedFramework("CoreFoundation")]),
+        .executableTarget(name: "NiceTouch", dependencies: ["NiceTouchCore", "NiceTouchModels", "TrackpadBridge"], resources: [.copy("Resources/mlx_worker.py"), .copy("Resources/rule.schema.json"), .copy("Resources/system-prompt.txt")]),
         .testTarget(name: "NiceTouchCoreTests", dependencies: ["NiceTouchCore"]),
         .testTarget(name: "NiceTouchModelsTests", dependencies: ["NiceTouchModels", "NiceTouchCore"])
     ]
